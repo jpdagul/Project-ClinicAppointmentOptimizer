@@ -1,0 +1,25 @@
+# Core Python libraries
+pandas
+numpy
+scikit-learn
+joblib
+imbalanced-learn
+
+# Data visualization
+matplotlib
+seaborn
+plotly
+
+# Machine learning explainability
+shap
+lime
+
+# Web app interface (choose one)
+streamlit
+
+# Optional (for optimization/simulation)
+simpy
+scipy
+
+# Jupyter notebook support
+jupyter

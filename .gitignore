@@ -1,0 +1,73 @@
+# ============================================
+# Python (Backend & Model)
+# ============================================
+
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# Django (Backend)
+db.sqlite3
+db.sqlite3-journal
+*.log
+/staticfiles
+/static
+
+# Python cache
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# ============================================
+# Node.js / Frontend (React + Vite)
+# ============================================
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# ESLint cache
+.eslintcache
+
+# ============================================
+# IDE / Editor
+# ============================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ============================================
+# OS Files
+# ============================================
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
