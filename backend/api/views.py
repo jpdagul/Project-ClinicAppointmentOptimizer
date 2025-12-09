@@ -386,36 +386,36 @@ def get_dashboard_insights(request):
 def run_simulation(request):
     """
     Run clinic simulation.
-    
-    Expected: { doctors, slotsPerDay, overbookingPercentage, 
-               averageAppointmentTime, clinicHours }
-    Response: { averageWaitTime, doctorUtilization, patientSatisfaction, 
-                noShowRate, overflowPatients, recommendedOverbooking }
+
+    Expected JSON body:
+    {
+      "date": "YYYY-MM-DD",
+      "doctors": int,
+      "slotsPerDay": int,
+      "overbookingPercentage": float,
+      "averageAppointmentTime": float,
+      "clinicHours": float
+    }
     """
     try:
         parameters = request.data
-        
-        # Validate required parameters
-        required_params = ['doctors', 'slotsPerDay', 'overbookingPercentage', 
-                          'averageAppointmentTime', 'clinicHours']
+
+        required_params = ['date', 'doctors', 'slotsPerDay', 'overbookingPercentage',
+                           'averageAppointmentTime', 'clinicHours']
         missing_params = [p for p in required_params if p not in parameters]
-        
+
         if missing_params:
             return Response(
                 {'error': f'Missing required parameters: {", ".join(missing_params)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Run simulation
+
         results = SimulationService.run_simulation(parameters)
-        
         return Response(results)
-        
+
     except Exception as e:
-        return Response(
-            {'error': f'Error running simulation: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': f'Error running simulation: {str(e)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
