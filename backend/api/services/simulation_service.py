@@ -86,7 +86,7 @@ def _simulate_clinic(
 def _patient_satisfaction(avg_wait: float, overflow: int, scheduled: int) -> float:
     wait_penalty = min(40.0, (avg_wait / 30.0) * 40.0)
     overflow_penalty = (overflow / scheduled) * 60.0 if scheduled > 0 else 0.0
-    return max(0.0, 100.0 - wait_penalty - overflow_penalty)
+    return 100.0 - wait_penalty - overflow_penalty
 
 
 def _recommend_overbooking(
@@ -274,11 +274,31 @@ class SimulationService:
         else:
             no_show_rate = 0
         
-        # Estimate other metrics
-        average_wait_time = 28.5  # Default estimate
-        doctor_utilization = 82.3  # Default estimate
-        patient_satisfaction = 91.2  # Default estimate
-        optimal_overbooking = 12  # Default estimate
+        # Calculate metrics dynamically from patient data
+        # Estimate wait time based on number of patients
+        # Base wait time of 15 min + 0.5 min per patient over 20
+        average_wait_time = max(15, 15 + (max(0, total_patients - 20) * 0.5))
+        
+        # Estimate utilization based on patient load
+        # More patients = higher utilization (capped at 95%)
+        doctor_utilization = min(95, max(60, 70 + (total_patients / 10)))
+        
+        # Estimate satisfaction based on wait time and no-show rate
+        # Lower wait time and no-show rate = higher satisfaction
+        # Wait penalty: up to 70 points (for 84+ min wait) - same as overbooking strategies
+        wait_penalty = min(70, (average_wait_time / 60) * 50)
+        # No-show penalty: up to 30 points (for 75%+ no-show rate)
+        no_show_penalty = min(30, (no_show_rate / 75) * 30)
+        patient_satisfaction = 100 - wait_penalty - no_show_penalty
+        
+        # Calculate optimal overbooking based on utilization
+        # If utilization is low, can increase overbooking
+        if doctor_utilization < 75:
+            optimal_overbooking = min(15, 10 + 2)
+        elif doctor_utilization > 90:
+            optimal_overbooking = max(5, 10 - 2)
+        else:
+            optimal_overbooking = 12
         
         return {
             'totalPatients': total_patients,

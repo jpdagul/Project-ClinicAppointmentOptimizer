@@ -217,17 +217,31 @@ def get_weekly_performance(request):
             }
             
             weekly_data = []
+            # Calculate average wait time from metrics if available
+            avg_wait_time = 0
+            if 'patient_data' in request.session:
+                try:
+                    metrics_df = pd.DataFrame(request.session['patient_data'])
+                    # Estimate wait time based on number of appointments (more appointments = longer wait)
+                    # Base wait time of 15 min + 0.5 min per appointment over 20
+                    total_appts = len(metrics_df)
+                    avg_wait_time = max(15, 15 + (max(0, total_appts - 20) * 0.5))
+                except:
+                    avg_wait_time = 0
+            
             for day_name, day_abbr in day_mapping.items():
                 day_data = patient_data[patient_data['DayOfWeek'] == day_name]
                 appointments = len(day_data)
                 no_shows = len(day_data[day_data.get('No-show', pd.Series(['No'] * len(day_data))) == 'Yes']) if 'No-show' in day_data.columns else 0
-                wait_time = 25  # Default estimate
+                # Calculate wait time based on appointments for that day
+                # More appointments = longer wait time
+                wait_time = max(10, avg_wait_time + (max(0, appointments - 20) * 0.3)) if appointments > 0 else 0
                 
                 weekly_data.append({
                     'day': day_abbr,
                     'appointments': appointments,
                     'noShows': no_shows,
-                    'waitTime': wait_time
+                    'waitTime': round(wait_time, 1)
                 })
         else:
             # Return zero weekly data if no data
@@ -260,32 +274,53 @@ def get_overbooking_strategies(request):
     """
     # Only return strategies if patient data exists
     if 'patient_data' in request.session and len(request.session['patient_data']) > 0:
-        strategies = [
-            {
-                'strategy': 'Conservative (5%)',
-                'waitTime': 22,
-                'utilization': 68,
-                'satisfaction': 94
-            },
-            {
-                'strategy': 'Current (10%)',
-                'waitTime': 28,
-                'utilization': 82,
-                'satisfaction': 91
-            },
-            {
-                'strategy': 'Aggressive (15%)',
-                'waitTime': 35,
-                'utilization': 89,
-                'satisfaction': 87
-            },
-            {
-                'strategy': 'Optimal (12%)',
-                'waitTime': 26,
-                'utilization': 85,
-                'satisfaction': 92
-            }
-        ]
+        try:
+            patient_data = pd.DataFrame(request.session['patient_data'])
+            total_patients = len(patient_data)
+            
+            # Calculate base metrics from patient data
+            base_wait_time = max(15, 15 + (max(0, total_patients - 20) * 0.5))
+            base_utilization = min(95, max(60, 70 + (total_patients / 10)))
+            
+            # Calculate no-show rate from patient data (same as dashboard metrics)
+            if 'No-show' in patient_data.columns:
+                no_show_rate = (patient_data['No-show'] == 'Yes').sum() / total_patients * 100
+            else:
+                no_show_rate = 0
+            
+            # Calculate strategies dynamically based on overbooking percentage
+            strategies = []
+            strategy_configs = [
+                {'name': 'Conservative', 'pct': 5},
+                {'name': 'Current', 'pct': 10},
+                {'name': 'Aggressive', 'pct': 15},
+                {'name': 'Optimal', 'pct': 12}
+            ]
+            
+            for config in strategy_configs:
+                overbooking_pct = config['pct']
+                # Calculate wait time: increases with overbooking
+                # More overbooking = more patients = longer wait times
+                wait_time = base_wait_time + (overbooking_pct * 1.5)
+                # Calculate utilization: increases with overbooking
+                utilization = min(95, base_utilization + (overbooking_pct * 1.2))
+                # Calculate satisfaction using the SAME formula as dashboard metrics
+                # Wait penalty: up to 50 points (for 60+ min wait)
+                # But allow higher penalties for very long waits to differentiate strategies
+                wait_penalty = min(70, (wait_time / 60) * 50)
+                # No-show penalty: up to 30 points (for 75%+ no-show rate)
+                no_show_penalty = min(30, (no_show_rate / 75) * 30)
+                satisfaction = 100 - wait_penalty - no_show_penalty
+                
+                strategies.append({
+                    'strategy': f"{config['name']} ({overbooking_pct}%)",
+                    'waitTime': round(wait_time, 1),
+                    'utilization': round(utilization, 1),
+                    'satisfaction': round(satisfaction, 1)
+                })
+        except Exception as e:
+            logger.error(f"Error calculating strategies: {e}")
+            strategies = []
     else:
         # Return empty array if no data
         strategies = []
