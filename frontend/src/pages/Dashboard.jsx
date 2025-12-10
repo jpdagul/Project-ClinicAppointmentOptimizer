@@ -26,6 +26,11 @@ function Dashboard({ onNavigate }) {
   const [insights, setInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Calculate max appointments for progress bar scaling
+  const maxAppointments = weeklyData.length > 0
+    ? Math.max(...weeklyData.map(day => day.appointments), 1)
+    : 1;
+
   // Fetch dashboard data from API
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -105,10 +110,12 @@ function Dashboard({ onNavigate }) {
         : "text-green-600";
     }
     if (type === "satisfaction") {
-      return value > 90
+      return value >= 80
         ? "text-green-600"
-        : value > 80
+        : value >= 60
         ? "text-yellow-600"
+        : value >= 0
+        ? "text-orange-600"
         : "text-red-600";
     }
     return "text-blue-600";
@@ -257,7 +264,7 @@ function Dashboard({ onNavigate }) {
                       <div className="w-20 bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-blue-600 h-2 rounded-full"
-                          style={{ width: `${(day.appointments / 60) * 100}%` }}
+                          style={{ width: `${(day.appointments / maxAppointments) * 100}%` }}
                         ></div>
                       </div>
                       <span className="text-sm text-gray-600">
@@ -296,14 +303,31 @@ function Dashboard({ onNavigate }) {
                     "satisfaction"
                   )}`}
                 >
-                  {metrics.patientSatisfaction}%
+                  {metrics.patientSatisfaction.toFixed(1)}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
+              <div className="w-full bg-gray-200 rounded-full h-3 relative">
                 <div
-                  className="bg-green-600 h-3 rounded-full"
-                  style={{ width: `${metrics.patientSatisfaction}%` }}
+                  className={`h-3 rounded-full ${
+                    metrics.patientSatisfaction >= 80
+                      ? "bg-green-600"
+                      : metrics.patientSatisfaction >= 60
+                      ? "bg-yellow-600"
+                      : metrics.patientSatisfaction >= 0
+                      ? "bg-orange-600"
+                      : "bg-red-600"
+                  }`}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, metrics.patientSatisfaction))}%`,
+                  }}
                 ></div>
+                {metrics.patientSatisfaction < 0 && (
+                  <div className="absolute inset-0 flex items-center justify-start pl-2">
+                    <span className="text-xs text-red-600 font-semibold">
+                      {metrics.patientSatisfaction.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -313,13 +337,15 @@ function Dashboard({ onNavigate }) {
                   No-Show Rate
                 </span>
                 <span className="text-sm font-bold text-blue-600">
-                  {metrics.noShowRate}%
+                  {metrics.noShowRate.toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
                   className="bg-blue-600 h-3 rounded-full"
-                  style={{ width: `${metrics.noShowRate}%` }}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, metrics.noShowRate))}%`,
+                  }}
                 ></div>
               </div>
             </div>
