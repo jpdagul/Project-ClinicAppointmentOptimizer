@@ -236,19 +236,8 @@ class SimulationService:
             },
         }
 
-
-    
     @staticmethod
-    def calculate_metrics(patient_data):
-        """
-        Calculate clinic metrics from patient data.
-        
-        Args:
-            patient_data: DataFrame with patient appointment data
-            
-        Returns:
-            dict: Calculated metrics
-        """
+    def run_simulation_for_cohort(params, patient_data):
         if patient_data is None or len(patient_data) == 0:
             return {
                 'totalPatients': 0,
@@ -257,56 +246,142 @@ class SimulationService:
                 'doctorUtilization': 0,
                 'patientSatisfaction': 0,
                 'noShowRate': 0,
-                'optimalOverbooking': 10
+                'optimalOverbooking': 0,
             }
-        
-        total_patients = len(patient_data)
-        
-        # Count high risk patients (if predictions available)
-        if 'riskLevel' in patient_data.columns:
-            high_risk = len(patient_data[patient_data['riskLevel'] == 'High'])
+
+        required = [
+            "date",
+            "doctors",
+            "slotsPerDay",
+            "overbookingPercentage",
+            "averageAppointmentTime",
+            "clinicHours",
+        ]
+        for r in required:
+            if r not in params:
+                raise ValueError(f"Missing parameter: {r}")
+
+        slots = int(params["slotsPerDay"])
+        doctors = int(params["doctors"])
+        overbooking_pct = float(params["overbookingPercentage"])
+        avg_time = float(params["averageAppointmentTime"])
+        clinic_minutes = float(params["clinicHours"]) * 60.0
+
+        scheduled = int(slots * (1 + overbooking_pct / 100.0))
+
+        # Ensure predictions exist
+        if "noShowProbability" not in patient_data.columns:
+            preds = get_prediction_service().predict(patient_data)
         else:
-            high_risk = 0
-        
-        # Calculate no-show rate (if available)
-        if 'No-show' in patient_data.columns:
-            no_show_rate = (patient_data['No-show'] == 'Yes').sum() / total_patients * 100
-        else:
-            no_show_rate = 0
-        
-        # Calculate metrics dynamically from patient data
-        # Estimate wait time based on number of patients
-        # Base wait time of 15 min + 0.5 min per patient over 20
-        average_wait_time = max(15, 15 + (max(0, total_patients - 20) * 0.5))
-        
-        # Estimate utilization based on patient load
-        # More patients = higher utilization (capped at 95%)
-        doctor_utilization = min(95, max(60, 70 + (total_patients / 10)))
-        
-        # Estimate satisfaction based on wait time and no-show rate
-        # Lower wait time and no-show rate = higher satisfaction
-        # Wait penalty: up to 70 points (for 84+ min wait) - same as overbooking strategies
-        wait_penalty = min(70, (average_wait_time / 60) * 50)
-        # No-show penalty: up to 30 points (for 75%+ no-show rate)
-        no_show_penalty = min(30, (no_show_rate / 75) * 30)
-        patient_satisfaction = 100 - wait_penalty - no_show_penalty
-        
-        # Calculate optimal overbooking based on utilization
-        # If utilization is low, can increase overbooking
-        if doctor_utilization < 75:
-            optimal_overbooking = min(15, 10 + 2)
-        elif doctor_utilization > 90:
-            optimal_overbooking = max(5, 10 - 2)
-        else:
-            optimal_overbooking = 12
-        
+            preds = patient_data.copy()
+
+        if len(preds) > scheduled:
+            preds = preds.sample(n=scheduled, random_state=42)
+
+        total_patients = len(preds)
+
+        bounded_probs = preds["noShowProbability"].clip(0.05, 0.6)
+
+        expected_attending = round((1.0 - bounded_probs).sum())
+        expected_attending = max(0, min(expected_attending, scheduled))
+
+        avg_wait, utilization, overflow = _simulate_clinic(
+            doctors, expected_attending, avg_time, clinic_minutes
+        )
+
+        satisfaction = _patient_satisfaction(avg_wait, overflow, scheduled)
+
+        overflow_rate = overflow / scheduled if scheduled else 0.0
+        optimal_overbooking = _recommend_overbooking(
+            utilization, overflow_rate, overbooking_pct, avg_time
+        )
+
+        high_risk = int((bounded_probs >= 0.6).sum())
+        no_show_rate = (
+            (1.0 - (expected_attending / scheduled)) * 100 if scheduled else 0
+        )
+
         return {
             'totalPatients': total_patients,
             'highRiskPatients': high_risk,
-            'averageWaitTime': average_wait_time,
-            'doctorUtilization': doctor_utilization,
-            'patientSatisfaction': patient_satisfaction,
+            'averageWaitTime': round(avg_wait, 1),
+            'doctorUtilization': round(utilization, 1),
+            'patientSatisfaction': round(satisfaction, 1),
             'noShowRate': round(no_show_rate, 1),
-            'optimalOverbooking': optimal_overbooking
+            'optimalOverbooking': int(optimal_overbooking),
         }
+
+
+    
+    # @staticmethod
+    # def calculate_metrics(patient_data):
+    #     """
+    #     Calculate clinic metrics from patient data.
+        
+    #     Args:
+    #         patient_data: DataFrame with patient appointment data
+            
+    #     Returns:
+    #         dict: Calculated metrics
+    #     """
+    #     if patient_data is None or len(patient_data) == 0:
+    #         return {
+    #             'totalPatients': 0,
+    #             'highRiskPatients': 0,
+    #             'averageWaitTime': 0,
+    #             'doctorUtilization': 0,
+    #             'patientSatisfaction': 0,
+    #             'noShowRate': 0,
+    #             'optimalOverbooking': 10
+    #         }
+        
+    #     total_patients = len(patient_data)
+        
+    #     # Count high risk patients (if predictions available)
+    #     if 'riskLevel' in patient_data.columns:
+    #         high_risk = len(patient_data[patient_data['riskLevel'] == 'High'])
+    #     else:
+    #         high_risk = 0
+        
+    #     # Calculate no-show rate (if available)
+    #     if 'No-show' in patient_data.columns:
+    #         no_show_rate = (patient_data['No-show'] == 'Yes').sum() / total_patients * 100
+    #     else:
+    #         no_show_rate = 0
+        
+    #     # Calculate metrics dynamically from patient data
+    #     # Estimate wait time based on number of patients
+    #     # Base wait time of 15 min + 0.5 min per patient over 20
+    #     average_wait_time = max(15, 15 + (max(0, total_patients - 20) * 0.5))
+        
+    #     # Estimate utilization based on patient load
+    #     # More patients = higher utilization (capped at 95%)
+    #     doctor_utilization = min(95, max(60, 70 + (total_patients / 10)))
+        
+    #     # Estimate satisfaction based on wait time and no-show rate
+    #     # Lower wait time and no-show rate = higher satisfaction
+    #     # Wait penalty: up to 70 points (for 84+ min wait) - same as overbooking strategies
+    #     wait_penalty = min(70, (average_wait_time / 60) * 50)
+    #     # No-show penalty: up to 30 points (for 75%+ no-show rate)
+    #     no_show_penalty = min(30, (no_show_rate / 75) * 30)
+    #     patient_satisfaction = 100 - wait_penalty - no_show_penalty
+        
+    #     # Calculate optimal overbooking based on utilization
+    #     # If utilization is low, can increase overbooking
+    #     if doctor_utilization < 75:
+    #         optimal_overbooking = min(15, 10 + 2)
+    #     elif doctor_utilization > 90:
+    #         optimal_overbooking = max(5, 10 - 2)
+    #     else:
+    #         optimal_overbooking = 12
+        
+    #     return {
+    #         'totalPatients': total_patients,
+    #         'highRiskPatients': high_risk,
+    #         'averageWaitTime': average_wait_time,
+    #         'doctorUtilization': doctor_utilization,
+    #         'patientSatisfaction': patient_satisfaction,
+    #         'noShowRate': round(no_show_rate, 1),
+    #         'optimalOverbooking': optimal_overbooking
+    #     }
 

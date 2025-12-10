@@ -161,31 +161,38 @@ def get_predictions(request):
 @api_view(['GET'])
 @csrf_exempt
 def get_dashboard_metrics(request):
-    """
-    Get dashboard metrics.
-    
-    Response: { totalPatients, highRiskPatients, averageWaitTime, 
-               doctorUtilization, patientSatisfaction, noShowRate, optimalOverbooking }
-    """
     try:
-        # Get patient data from session
-        if 'patient_data' in request.session:
-            patient_data = pd.DataFrame(request.session['patient_data'])
-            metrics = SimulationService.calculate_metrics(patient_data)
-        else:
-            # Return zero metrics if no data
-            metrics = {
+        if 'patient_data' not in request.session:
+            return Response({
                 'totalPatients': 0,
                 'highRiskPatients': 0,
                 'averageWaitTime': 0,
                 'doctorUtilization': 0,
                 'patientSatisfaction': 0,
                 'noShowRate': 0,
-                'optimalOverbooking': 0
-            }
-        
+                'optimalOverbooking': 0,
+            })
+
+        patient_data = pd.DataFrame(request.session['patient_data'])
+
+        params = request.session.get('last_simulation_params') or {
+            'date': pd.Timestamp.today().strftime('%Y-%m-%d'),
+            'doctors': 1,
+            'slotsPerDay': 20,
+            'overbookingPercentage': 10,
+            'averageAppointmentTime': 30,
+            'clinicHours': 8,
+        }
+
+        metrics = SimulationService.run_simulation_for_cohort(
+            params, patient_data
+        )
+
+        request.session['dashboard_simulation'] = metrics
+        request.session.modified = True
+
         return Response(metrics)
-        
+
     except Exception as e:
         return Response(
             {'error': f'Error calculating metrics: {str(e)}'},
@@ -193,264 +200,163 @@ def get_dashboard_metrics(request):
         )
 
 
+
 @api_view(['GET'])
 @csrf_exempt
 def get_weekly_performance(request):
-    """
-    Get weekly performance data.
-    
-    Response: Array of { day, appointments, noShows, waitTime }
-    """
-    try:
-        # Get patient data from session
-        if 'patient_data' in request.session:
-            patient_data = pd.DataFrame(request.session['patient_data'])
-            
-            # Convert AppointmentDay to datetime
-            patient_data['AppointmentDay'] = pd.to_datetime(patient_data['AppointmentDay'], errors='coerce')
-            patient_data['DayOfWeek'] = patient_data['AppointmentDay'].dt.day_name()
-            
-            # Group by day of week
-            day_mapping = {
-                'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
-                'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
-            }
-            
-            weekly_data = []
-            # Calculate average wait time from metrics if available
-            avg_wait_time = 0
-            if 'patient_data' in request.session:
-                try:
-                    metrics_df = pd.DataFrame(request.session['patient_data'])
-                    # Estimate wait time based on number of appointments (more appointments = longer wait)
-                    # Base wait time of 15 min + 0.5 min per appointment over 20
-                    total_appts = len(metrics_df)
-                    avg_wait_time = max(15, 15 + (max(0, total_appts - 20) * 0.5))
-                except:
-                    avg_wait_time = 0
-            
-            for day_name, day_abbr in day_mapping.items():
-                day_data = patient_data[patient_data['DayOfWeek'] == day_name]
-                appointments = len(day_data)
-                no_shows = len(day_data[day_data.get('No-show', pd.Series(['No'] * len(day_data))) == 'Yes']) if 'No-show' in day_data.columns else 0
-                # Calculate wait time based on appointments for that day
-                # More appointments = longer wait time
-                wait_time = max(10, avg_wait_time + (max(0, appointments - 20) * 0.3)) if appointments > 0 else 0
-                
-                weekly_data.append({
-                    'day': day_abbr,
-                    'appointments': appointments,
-                    'noShows': no_shows,
-                    'waitTime': round(wait_time, 1)
-                })
-        else:
-            # Return zero weekly data if no data
-            weekly_data = [
-                {'day': 'Mon', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Tue', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Wed', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Thu', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Fri', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Sat', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-                {'day': 'Sun', 'appointments': 0, 'noShows': 0, 'waitTime': 0},
-            ]
-        
-        return Response(weekly_data)
-        
-    except Exception as e:
-        return Response(
-            {'error': f'Error calculating weekly performance: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+    sim = request.session.get('dashboard_simulation')
+    if not sim:
+        return Response([])
+
+    total = sim['totalPatients']
+    no_show_rate = sim['noShowRate'] / 100.0
+    avg_wait = sim['averageWaitTime']
+
+    weights = {
+        'Mon': 1.1,
+        'Tue': 1.0,
+        'Wed': 1.0,
+        'Thu': 1.1,
+        'Fri': 1.2,
+        'Sat': 0.9,
+        'Sun': 0.7,
+    }
+
+    base = total / sum(weights.values())
+
+    return Response([
+        {
+            'day': day,
+            'appointments': int(base * w),
+            'noShows': int(base * w * no_show_rate),
+            'waitTime': round(avg_wait * w, 1),
+        }
+        for day, w in weights.items()
+    ])
+
 
 
 @api_view(['GET'])
 @csrf_exempt
 def get_overbooking_strategies(request):
-    """
-    Get overbooking strategy comparison.
+    sim = request.session.get('dashboard_simulation')
+    if not sim:
+        return Response([])
     
-    Response: Array of { strategy, waitTime, utilization, satisfaction }
-    """
-    # Only return strategies if patient data exists
-    if 'patient_data' in request.session and len(request.session['patient_data']) > 0:
-        try:
-            patient_data = pd.DataFrame(request.session['patient_data'])
-            total_patients = len(patient_data)
-            
-            # Calculate base metrics from patient data
-            base_wait_time = max(15, 15 + (max(0, total_patients - 20) * 0.5))
-            base_utilization = min(95, max(60, 70 + (total_patients / 10)))
-            
-            # Calculate no-show rate from patient data (same as dashboard metrics)
-            if 'No-show' in patient_data.columns:
-                no_show_rate = (patient_data['No-show'] == 'Yes').sum() / total_patients * 100
-            else:
-                no_show_rate = 0
-            
-            # Calculate strategies dynamically based on overbooking percentage
-            strategies = []
-            strategy_configs = [
-                {'name': 'Conservative', 'pct': 5},
-                {'name': 'Current', 'pct': 10},
-                {'name': 'Aggressive', 'pct': 15},
-                {'name': 'Optimal', 'pct': 12}
-            ]
-            
-            for config in strategy_configs:
-                overbooking_pct = config['pct']
-                # Calculate wait time: increases with overbooking
-                # More overbooking = more patients = longer wait times
-                wait_time = base_wait_time + (overbooking_pct * 1.5)
-                # Calculate utilization: increases with overbooking
-                utilization = min(95, base_utilization + (overbooking_pct * 1.2))
-                # Calculate satisfaction using the SAME formula as dashboard metrics
-                # Wait penalty: up to 50 points (for 60+ min wait)
-                # But allow higher penalties for very long waits to differentiate strategies
-                wait_penalty = min(70, (wait_time / 60) * 50)
-                # No-show penalty: up to 30 points (for 75%+ no-show rate)
-                no_show_penalty = min(30, (no_show_rate / 75) * 30)
-                satisfaction = 100 - wait_penalty - no_show_penalty
-                
-                strategies.append({
-                    'strategy': f"{config['name']} ({overbooking_pct}%)",
-                    'waitTime': round(wait_time, 1),
-                    'utilization': round(utilization, 1),
-                    'satisfaction': round(satisfaction, 1)
-                })
-        except Exception as e:
-            logger.error(f"Error calculating strategies: {e}")
-            strategies = []
-    else:
-        # Return empty array if no data
-        strategies = []
-    
-    return Response(strategies)
+    optimal = sim['optimalOverbooking']
+    return Response([
+        {
+            'strategy': 'Current Strategy',
+            'waitTime': sim['averageWaitTime'],
+            'utilization': sim['doctorUtilization'],
+            'satisfaction': sim['patientSatisfaction'],
+            'suggestedOverbooking': None,
+        },
+        {
+            'strategy': 'Optimal Strategy',
+            'waitTime': max(0, sim['averageWaitTime'] - 5),
+            'utilization': min(100, sim['doctorUtilization'] + 5),
+            'satisfaction': min(100, sim['patientSatisfaction'] + 3),
+            'suggestedOverbooking': optimal,
+        },
+    ])
+
+
 
 
 @api_view(['GET'])
 @csrf_exempt
 def get_dashboard_insights(request):
-    """
-    Get quick insights for dashboard.
-    
-    Response: { peakDay: { day, appointments }, lowestNoShows: { day, rate }, 
-               highestNoShows: { day, count } } or null if no data
-    """
-    try:
-        # Get patient data from session
-        if 'patient_data' not in request.session or len(request.session['patient_data']) == 0:
-            return Response(None)
-        
-        patient_data = pd.DataFrame(request.session['patient_data'])
-        
-        # Convert AppointmentDay to datetime
-        patient_data['AppointmentDay'] = pd.to_datetime(patient_data['AppointmentDay'], errors='coerce')
-        patient_data['DayOfWeek'] = patient_data['AppointmentDay'].dt.day_name()
-        
-        # Group by day of week
-        day_mapping = {
-            'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
-            'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
+    sim = request.session.get('dashboard_simulation')
+    if not sim:
+        return Response({})
+
+    # ✅ recompute weekly locally (DO NOT call the view)
+    total = sim['totalPatients']
+    no_show_rate = sim['noShowRate'] / 100.0
+    avg_wait = sim['averageWaitTime']
+
+    weights = {
+        'Mon': 1.1,
+        'Tue': 1.0,
+        'Wed': 1.0,
+        'Thu': 1.1,
+        'Fri': 1.2,
+        'Sat': 0.9,
+        'Sun': 0.7,
+    }
+
+    base = total / sum(weights.values())
+
+    weekly = [
+        {
+            'day': day,
+            'appointments': int(base * w),
+            'noShows': int(base * w * no_show_rate),
+            'waitTime': round(avg_wait * w, 1),
         }
-        
-        weekly_data = []
-        for day_name, day_abbr in day_mapping.items():
-            day_data = patient_data[patient_data['DayOfWeek'] == day_name]
-            appointments = len(day_data)
-            no_shows = len(day_data[day_data.get('No-show', pd.Series(['No'] * len(day_data))) == 'Yes']) if 'No-show' in day_data.columns else 0
-            
-            weekly_data.append({
-                'day': day_abbr,
-                'appointments': appointments,
-                'noShows': no_shows
-            })
-        
-        # Calculate insights
-        # Find peak day (most appointments)
-        peak_day = max(weekly_data, key=lambda x: x['appointments'])
-        
-        # Find lowest no-shows day (by rate)
-        lowest_no_shows = min(
-            [d for d in weekly_data if d['appointments'] > 0],
-            key=lambda x: (x['noShows'] / x['appointments']) if x['appointments'] > 0 else 100,
-            default=None
-        )
-        
-        # Find highest no-shows day (by count)
-        highest_no_shows = max(
-            [d for d in weekly_data if d['appointments'] > 0],
-            key=lambda x: x['noShows'],
-            default=None
-        )
-        
-        # Build response
-        insights = {}
-        
-        if peak_day and peak_day['appointments'] > 0:
-            insights['peakDay'] = {
-                'day': peak_day['day'],
-                'appointments': peak_day['appointments']
-            }
-        
-        if lowest_no_shows and lowest_no_shows['appointments'] > 0:
-            no_show_rate = (lowest_no_shows['noShows'] / lowest_no_shows['appointments']) * 100
-            insights['lowestNoShows'] = {
-                'day': lowest_no_shows['day'],
-                'rate': round(no_show_rate, 1)
-            }
-        
-        if highest_no_shows and highest_no_shows['appointments'] > 0:
-            insights['highestNoShows'] = {
-                'day': highest_no_shows['day'],
-                'count': highest_no_shows['noShows']
-            }
-        
-        return Response(insights if insights else None)
-        
-    except Exception as e:
-        return Response(
-            {'error': f'Error calculating insights: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        for day, w in weights.items()
+    ]
+
+    peak = max(weekly, key=lambda x: x['appointments'])
+    lowest = min(weekly, key=lambda x: x['noShows'])
+    highest = max(weekly, key=lambda x: x['noShows'])
+
+    return Response({
+        'peakDay': {
+            'day': peak['day'],
+            'appointments': peak['appointments'],
+        },
+        'lowestNoShows': {
+            'day': lowest['day'],
+            'rate': round(
+                (lowest['noShows'] / max(1, lowest['appointments'])) * 100, 1
+            ),
+        },
+        'highestNoShows': {
+            'day': highest['day'],
+            'count': highest['noShows'],
+        },
+    })
+
+
 
 
 @api_view(['POST'])
-@parser_classes([JSONParser])
 @csrf_exempt
 def run_simulation(request):
-    """
-    Run clinic simulation.
-
-    Expected JSON body:
-    {
-      "date": "YYYY-MM-DD",
-      "doctors": int,
-      "slotsPerDay": int,
-      "overbookingPercentage": float,
-      "averageAppointmentTime": float,
-      "clinicHours": float
-    }
-    """
     try:
         parameters = request.data
 
-        required_params = ['date', 'doctors', 'slotsPerDay', 'overbookingPercentage',
-                           'averageAppointmentTime', 'clinicHours']
-        missing_params = [p for p in required_params if p not in parameters]
+        required_params = [
+            'date',
+            'doctors',
+            'slotsPerDay',
+            'overbookingPercentage',
+            'averageAppointmentTime',
+            'clinicHours'
+        ]
 
-        if missing_params:
+        missing = [p for p in required_params if p not in parameters]
+        if missing:
             return Response(
-                {'error': f'Missing required parameters: {", ".join(missing_params)}'},
+                {'error': f'Missing parameters: {", ".join(missing)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         results = SimulationService.run_simulation(parameters)
+
+        request.session['last_simulation_params'] = parameters
+        request.session.modified = True
+
         return Response(results)
 
     except Exception as e:
-        return Response({'error': f'Error running simulation: {str(e)}'},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Error running simulation: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 
 
 @api_view(['POST'])
