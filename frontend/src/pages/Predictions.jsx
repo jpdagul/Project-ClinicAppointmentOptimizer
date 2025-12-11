@@ -205,7 +205,7 @@ function PredictionsFullView() {
               <select
                 value={filterRisk}
                 onChange={(e) => setFilterRisk(e.target.value)}
-                className="border border-slate-300 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                className="border border-slate-300 rounded-full px-4 py-1.5 text-sm outline-none"
               >
                 <option value="all">All Risk Levels</option>
                 <option value="high">High Risk</option>
@@ -221,7 +221,7 @@ function PredictionsFullView() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="border border-slate-300 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                className="border border-slate-300 rounded-full px-4 py-1.5 text-sm focus:outline-none"
               >
                 <option value="probability">No-Show Probability</option>
                 <option value="name">Patient ID</option>
