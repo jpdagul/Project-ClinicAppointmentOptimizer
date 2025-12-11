@@ -271,7 +271,6 @@ def get_dashboard_insights(request):
     if not sim:
         return Response({})
 
-    # ✅ recompute weekly locally (DO NOT call the view)
     total = sim['totalPatients']
     no_show_rate = sim['noShowRate'] / 100.0
     avg_wait = sim['averageWaitTime']
