@@ -1,6 +1,7 @@
 import joblib
 import numpy as np
 import matplotlib.pyplot as plt
+
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.tree import DecisionTreeClassifier
@@ -16,16 +17,17 @@ from sklearn.metrics import (
     confusion_matrix
 )
 from sklearn.model_selection import cross_val_score
+from sklearn.calibration import CalibratedClassifierCV
 from imblearn.over_sampling import SMOTE
 from xgboost import XGBClassifier
+
 from src.data_preprocessing import load_and_clean_data
 
 
 def train_and_select_model():
-    # load and normalize data
+    # load and scale data
     X_train, X_test, y_train, y_test = load_and_clean_data("data/noshowappointments.csv")
 
-    print("\nNormalizing data...")
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
@@ -40,12 +42,12 @@ def train_and_select_model():
     models = {
         "Decision Tree": DecisionTreeClassifier(class_weight='balanced', random_state=42),
         "Random Forest": RandomForestClassifier(class_weight='balanced', n_estimators=100, random_state=42),
-        "Gradient Boosting": GradientBoostingClassifier(random_state=42, subsample=0.9),
+        "Gradient Boosting": GradientBoostingClassifier(random_state=42, n_estimators=200, learning_rate=0.1, subsample=0.9),
         "XGBoost": XGBClassifier(
             random_state=42,
             n_estimators=200,
             learning_rate=0.1,
-            eval_metric='logloss',
+            eval_metric="logloss",
             scale_pos_weight=len(y_train_bal[y_train_bal == 0]) / len(y_train_bal[y_train_bal == 1])
         )
     }
@@ -71,16 +73,27 @@ def train_and_select_model():
         if f1 > best_score:
             best_score, best_model, best_name = f1, model, name
 
-    # tune threshold based on F1 optimization
-    # --> improves recall (catching more no-shows) at the cost of some false positives
+    print(f"\nSelected base model: {best_name}")
+
+    # Probability Calibration
+    calibrated_model = CalibratedClassifierCV(
+        best_model,
+        method="isotonic", # or sigmoid
+        cv=3
+    )
+    calibrated_model.fit(X_train_bal, y_train_bal)
+
+    y_proba_cal = calibrated_model.predict_proba(X_test_scaled)[:, 1]
+
+    # Threshold tuning
     print("\nTuning decision threshold for best model...")
-    y_proba = best_model.predict_proba(X_test_scaled)[:, 1]
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
+    precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba_cal)
     f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-9)
     best_threshold = thresholds[np.argmax(f1_scores)]
-    y_pred_thresh = (y_proba > best_threshold).astype(int)
+    y_pred_thresh = (y_proba_cal > best_threshold).astype(int)
 
     print(f"Selected threshold: {best_threshold:.2f}")
+
     print(f"Precision: {precision_score(y_test, y_pred_thresh):.4f} | "
           f"Recall: {recall_score(y_test, y_pred_thresh):.4f} | "
           f"F1: {f1_score(y_test, y_pred_thresh):.4f}")
@@ -101,7 +114,7 @@ def train_and_select_model():
     print("Precision–Recall curve saved.")
 
     # plot ROC Curve
-    fpr, tpr, _ = roc_curve(y_test, y_proba)
+    fpr, tpr, _ = roc_curve(y_test, y_proba_cal)
     roc_auc = auc(fpr, tpr)
     plt.figure(figsize=(8, 6))
     plt.plot(fpr, tpr, label=f"ROC Curve (AUC = {roc_auc:.2f})", color='green')
@@ -152,7 +165,7 @@ def train_and_select_model():
 
     # save best model
     model_path = f"models/{best_name.lower().replace(' ', '_')}_model.pkl"
-    joblib.dump(best_model, model_path)
+    joblib.dump(calibrated_model, model_path)
     print(f"\nBest model: {best_name} | Saved to: {model_path}")
 
     return model_path
