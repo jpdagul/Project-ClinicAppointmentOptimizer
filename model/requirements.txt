@@ -4,6 +4,7 @@ numpy
 scikit-learn
 joblib
 imbalanced-learn
+xgboost
 
 # Data visualization
 matplotlib
