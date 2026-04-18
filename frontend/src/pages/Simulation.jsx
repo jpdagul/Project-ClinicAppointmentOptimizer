@@ -4,7 +4,6 @@ import { API_BASE_URL } from "../config";
 function Simulation() {
   // Simulation parameter state
   const [parameters, setParameters] = useState({
-    date: "",
     doctors: 1,
     slotsPerDay: 20,
     overbookingPercentage: 10,
@@ -17,11 +16,11 @@ function Simulation() {
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState(null);
 
-  // Update parameter values from sliders or date input
+  // Update parameter values from sliders
   const handleParameterChange = (key, value) => {
     setParameters((prev) => ({
       ...prev,
-      [key]: key === "date" ? value : parseInt(value),
+      [key]: parseInt(value),
     }));
   };
 
@@ -32,10 +31,10 @@ function Simulation() {
     setSimulationResults(null);
 
     try {
-      // Basic client-side validation
-      if (!parameters.date) {
-        throw new Error("Please select a simulation date.");
-      }
+      const payload = {
+        ...parameters,
+        date: new Date().toISOString().split("T")[0],
+      };
 
       const response = await fetch(`${API_BASE_URL}/simulation/run`, {
         method: "POST",
@@ -43,7 +42,7 @@ function Simulation() {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify(parameters),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -72,6 +71,13 @@ function Simulation() {
     if (waitTime >= 45) return "text-red-600";
     if (waitTime >= 30) return "text-yellow-600";
     return "text-green-600";
+  };
+
+  // Helper function: assign color based on patient satisfaction threshold
+  const getSatisfactionColor = (satisfaction) => {
+    if (satisfaction >= 70) return "text-green-600";
+    if (satisfaction >= 50) return "text-yellow-600";
+    return "text-red-600";
   };
 
   // Small presenter for results blocks (keeps UI DRY)
@@ -109,7 +115,11 @@ function Simulation() {
             <h5 className="text-sm font-medium text-gray-500">
               Patient Satisfaction
             </h5>
-            <p className="text-2xl font-bold text-green-600">
+            <p
+              className={`text-2xl font-bold ${getSatisfactionColor(
+                data.patientSatisfaction ?? 0
+              )}`}
+            >
               {data.patientSatisfaction?.toFixed(1) ?? "--"}%
             </p>
           </div>
@@ -141,8 +151,8 @@ function Simulation() {
           Clinic Simulation & Optimization
         </h2>
         <p className="text-gray-600 mt-6">
-          Adjust clinic parameters and run simulations to compare historical vs
-          model-predicted outcomes.
+          Adjust clinic parameters and run simulations on your uploaded patient
+          data to forecast wait times, utilization, and no-show impact.
         </p>
       </div>
 
@@ -150,18 +160,6 @@ function Simulation() {
         {/* Left section: Parameter sliders and run button */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">Clinic Parameters</h3>
-
-          <div className="mb-6">
-            <label className="text-sm font-medium text-gray-700">
-              Simulation Date
-            </label>
-            <input
-              type="date"
-              value={parameters.date}
-              onChange={(e) => handleParameterChange("date", e.target.value)}
-              className="w-full mt-2 p-2 border rounded-lg bg-slate-200 border-none outline-none"
-            />
-          </div>
 
           <div className="space-y-6">
             {/* doctors */}
@@ -331,52 +329,52 @@ function Simulation() {
 
           {simulationResults && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <ResultBlock
-                  title="Historical (Actual) Results"
-                  data={{
-                    averageWaitTime: simulationResults.actual?.averageWaitTime,
-                    doctorUtilization:
-                      simulationResults.actual?.doctorUtilization,
-                    patientSatisfaction:
-                      simulationResults.actual?.patientSatisfaction,
-                    noShowRate: simulationResults.actual?.noShowRate,
-                    overflowPatients:
-                      simulationResults.actual?.overflowPatients,
-                    recommendedOverbooking:
-                      simulationResults.actual?.recommendedOverbooking,
-                  }}
-                />
-
-                <ResultBlock
-                  title="Predicted (Model) Results"
-                  data={{
-                    averageWaitTime:
-                      simulationResults.predicted?.averageWaitTime,
-                    doctorUtilization:
-                      simulationResults.predicted?.doctorUtilization,
-                    patientSatisfaction:
-                      simulationResults.predicted?.patientSatisfaction,
-                    noShowRate: simulationResults.predicted?.noShowRate,
-                    overflowPatients:
-                      simulationResults.predicted?.overflowPatients,
-                    recommendedOverbooking:
-                      simulationResults.predicted?.recommendedOverbooking,
-                  }}
-                />
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+                ✅ Using your uploaded data —{" "}
+                <span className="font-semibold">
+                  {simulationResults.uploadedPatientCount}
+                </span>{" "}
+                patients uploaded,{" "}
+                <span className="font-semibold">
+                  {simulationResults.patientsAnalyzed}
+                </span>{" "}
+                booked into this simulated day.
               </div>
 
+              <ResultBlock
+                title="Simulation Results"
+                data={{
+                  averageWaitTime:
+                    simulationResults.predicted?.averageWaitTime,
+                  doctorUtilization:
+                    simulationResults.predicted?.doctorUtilization,
+                  patientSatisfaction:
+                    simulationResults.predicted?.patientSatisfaction,
+                  noShowRate: simulationResults.predicted?.noShowRate,
+                  overflowPatients:
+                    simulationResults.predicted?.overflowPatients,
+                  recommendedOverbooking:
+                    simulationResults.predicted?.recommendedOverbooking,
+                }}
+              />
+
               <div className="bg-white rounded-lg shadow p-6">
-                <h4 className="text-lg font-semibold mb-3">Daily Summary</h4>
-                <p>Date: {simulationResults.date}</p>
-                <p>Source: {simulationResults.dailySource}</p>
-                <p>
-                  Historical show rate: {simulationResults.daily_show_rate}%
-                </p>
-                <p>
-                  Historical no-show rate:{" "}
-                  {simulationResults.daily_no_show_rate}%
-                </p>
+                <h4 className="text-lg font-semibold mb-3">Run Summary</h4>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  <li>Run date: {simulationResults.date}</li>
+                  <li>
+                    Scheduled appointments:{" "}
+                    {simulationResults.scheduledAppointments}
+                  </li>
+                  <li>
+                    Patients in upload:{" "}
+                    {simulationResults.uploadedPatientCount}
+                  </li>
+                  <li>
+                    Patients booked into this day:{" "}
+                    {simulationResults.patientsAnalyzed}
+                  </li>
+                </ul>
                 <div className="mt-4">
                   <h4 className="text-md font-semibold mb-2">
                     Predicted No-Show Statistics

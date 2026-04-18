@@ -1,0 +1,27 @@
+# web
+Django==6.0.4
+djangorestframework==3.17.1
+django-cors-headers==4.9.0
+asgiref==3.11.1
+sqlparse==0.5.5
+
+# ml / data
+pandas==3.0.2
+numpy==2.4.4
+scikit-learn==1.5.1   # must match the version that trained gradient_boosting_model.pkl
+joblib==1.5.3
+imbalanced-learn==0.14.1
+scipy==1.17.1
+threadpoolctl==3.6.0
+sklearn-compat==0.1.5
+
+# simulation
+simpy==4.1.1
+
+# transitive (kept pinned so installs are reproducible)
+python-dateutil==2.9.0.post0
+six==1.17.0
+
+# To retrain the model from scratch (optional, not needed to run the app):
+#   pip install xgboost matplotlib lime
+#   brew install libomp   # macOS only, for xgboost

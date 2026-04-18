@@ -125,14 +125,23 @@ git clone https://github.com/edentesfai/healthcare_no_show_predictor
 cd healthcare_no_show_predictor
 ```
 
-Install required packages:
+From the **project root** (one level above this `model/` folder), create and activate a virtual environment, then install the consolidated dependencies:
 ```bash
+python3 -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-# Running the Training Pipeline
-To run the full machine learning workflow:
+For retraining only, install the additional ML / plotting libraries (still inside the same activated venv):
 ```bash
+pip install xgboost matplotlib lime
+brew install libomp   # macOS only, required by xgboost
+```
+
+# Running the Training Pipeline
+With the venv activated, switch into this folder and run the full machine learning workflow:
+```bash
+cd model
 python main.py
 ```
 

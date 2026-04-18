@@ -53,14 +53,14 @@ Django REST API backend for predicting patient no-shows and optimizing clinic sc
 
 ### Installation
 
-1. Create and activate a virtual environment:
+1. From the **project root** (one level above `backend/`), create and activate a virtual environment:
 
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-2. Install dependencies:
+2. Install dependencies (single consolidated file at project root):
 
 ```bash
 pip install -r requirements.txt
@@ -175,7 +175,6 @@ backend/
 ├── manage.py
 ├── settings.py
 ├── urls.py
-├── requirements.txt
 └── check_model.py
 ```
 

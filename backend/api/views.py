@@ -343,13 +343,27 @@ def run_simulation(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        results = SimulationService.run_simulation(parameters)
+        session_patients = request.session.get('patient_data')
+        if not session_patients:
+            return Response(
+                {'error': 'No uploaded patient data found. Please upload a CSV file on the Upload page first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        uploaded_patients = pd.DataFrame(session_patients)
+
+        results = SimulationService.run_simulation(parameters, uploaded_patients=uploaded_patients)
 
         request.session['last_simulation_params'] = parameters
         request.session.modified = True
 
         return Response(results)
 
+    except ValueError as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
     except Exception as e:
         return Response(
             {'error': f'Error running simulation: {str(e)}'},

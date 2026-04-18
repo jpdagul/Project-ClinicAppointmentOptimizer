@@ -52,10 +52,7 @@ This project uses the "Medical Appointment No Shows" dataset from Kaggle, contai
 
 To quickly test the website locally:
 
-1. **Start the backend:**
-```
-cd backend
-```
+1. **Install Python dependencies (from project root):**
 ```
 python3 -m venv venv
 ```
@@ -65,6 +62,11 @@ source venv/bin/activate
 ```
 pip install -r requirements.txt
 ```
+
+2. **Start the backend:**
+```
+cd backend
+```
 ```
 python manage.py migrate
 ```
@@ -72,7 +74,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-2. **Start the frontend (in a separate terminal):**
+3. **Start the frontend (in a separate terminal):**
 ```
 cd frontend
 ```
@@ -83,7 +85,7 @@ npm install
 npm run dev
 ```
 
-3. **Open your browser and go to http://localhost:5173 to access the web app.**
+4. **Open your browser and go to http://localhost:5173 to access the web app.**
 
 ## License
 
