@@ -6,6 +6,12 @@ function PredictionsFullView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // LIME explanation modal state
+  const [explanation, setExplanation] = useState(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState(null);
+  const [explanationFor, setExplanationFor] = useState(null);
+
   // Fetch predictions from API on component mount
   useEffect(() => {
     const fetchPredictions = async () => {
@@ -61,6 +67,44 @@ function PredictionsFullView() {
       console.error("Clear data error:", error);
       setError("Error clearing data. Please try again.");
     }
+  };
+
+  // Fetch a LIME explanation for a single appointment and open the modal
+  const handleExplain = async (patient) => {
+    setExplanationFor(patient);
+    setExplanation(null);
+    setExplanationError(null);
+    setExplanationLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/predictions/${patient.appointmentId}/explain`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error ||
+            `Failed to load explanation (HTTP ${response.status})`
+        );
+      }
+      const data = await response.json();
+      setExplanation(data);
+    } catch (err) {
+      console.error("Explain error:", err);
+      setExplanationError(err.message);
+    } finally {
+      setExplanationLoading(false);
+    }
+  };
+
+  const closeExplanation = () => {
+    setExplanationFor(null);
+    setExplanation(null);
+    setExplanationError(null);
+    setExplanationLoading(false);
   };
 
   // Filter and sort state
@@ -438,6 +482,12 @@ function PredictionsFullView() {
                   </td>
 
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
+                    <button
+                      onClick={() => handleExplain(patient)}
+                      className="px-3 py-1 border border-indigo-300 text-indigo-700 rounded-full transition-all mr-2 hover:bg-indigo-50 cursor-pointer"
+                    >
+                      Why?
+                    </button>
                     <button className="px-3 py-1 border border-slate-300 text-slate-400 rounded-full transition-all mr-2 cursor-not-allowed opacity-60">
                       📧 Remind
                     </button>
@@ -451,6 +501,166 @@ function PredictionsFullView() {
           </table>
         </div>
       </div>
+
+      {/* LIME explanation modal */}
+      {explanationFor && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={closeExplanation}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="border-b border-gray-200 px-6 py-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  Why this prediction?
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Patient ID {explanationFor.id} · Appointment #
+                  {explanationFor.appointmentId}
+                </p>
+              </div>
+              <button
+                onClick={closeExplanation}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none cursor-pointer"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="px-6 py-5">
+              {explanationLoading && (
+                <div className="text-center py-8">
+                  <div className="flex items-center justify-center gap-2">
+                    <svg
+                      className="animate-spin h-5 w-5 text-gray-400"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    <span className="text-gray-600 text-sm">
+                      Computing explanation…
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    This can take a few seconds the first time.
+                  </p>
+                </div>
+              )}
+
+              {explanationError && !explanationLoading && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-700 text-sm">{explanationError}</p>
+                </div>
+              )}
+
+              {explanation && !explanationLoading && !explanationError && (
+                <>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600">
+                      Predicted no-show probability:
+                    </p>
+                    <p
+                      className={`text-3xl font-bold ${getProbabilityColor(
+                        explanation.noShowProbability
+                      )}`}
+                    >
+                      {(explanation.noShowProbability * 100).toFixed(1)}%
+                    </p>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">
+                      Top contributing factors
+                    </p>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Red bars push toward <strong>No-Show</strong>. Green bars
+                      push toward <strong>Show</strong>. Bar length reflects
+                      relative impact.
+                    </p>
+
+                    {(() => {
+                      const maxAbs = Math.max(
+                        ...explanation.topFeatures.map((f) =>
+                          Math.abs(f.weight)
+                        ),
+                        1e-9
+                      );
+                      return (
+                        <ul className="space-y-2">
+                          {explanation.topFeatures.map((f, idx) => {
+                            const widthPct = (Math.abs(f.weight) / maxAbs) * 100;
+                            const isNoShow = f.direction === "noshow";
+                            return (
+                              <li key={idx} className="text-xs">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span
+                                    className="text-gray-800 font-mono truncate pr-2"
+                                    title={f.feature}
+                                  >
+                                    {f.feature}
+                                  </span>
+                                  <span
+                                    className={
+                                      isNoShow
+                                        ? "text-red-600 font-semibold"
+                                        : "text-green-600 font-semibold"
+                                    }
+                                  >
+                                    {f.weight > 0 ? "+" : ""}
+                                    {f.weight.toFixed(3)}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded h-2 overflow-hidden">
+                                  <div
+                                    className={`h-2 rounded ${
+                                      isNoShow ? "bg-red-500" : "bg-green-500"
+                                    }`}
+                                    style={{ width: `${widthPct}%` }}
+                                  />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      );
+                    })()}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div className="border-t border-gray-200 px-6 py-3 bg-gray-50 rounded-b-lg flex justify-end">
+              <button
+                onClick={closeExplanation}
+                className="px-4 py-1.5 text-sm border border-slate-300 rounded-full hover:bg-slate-100 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

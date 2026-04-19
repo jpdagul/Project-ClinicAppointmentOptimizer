@@ -18,6 +18,12 @@ Django REST API backend for predicting patient no-shows and optimizing clinic sc
 - Behavioral feature engineering (previous no-shows, wait times)
 - ML model integration (Gradient Boosting)
 
+### Explainability
+
+- Per-appointment LIME explanations exposed via REST endpoint
+- Returns the top contributing features (signed weights, direction toward Show or No-Show)
+- Reuses the same scaler, model, and feature column order as the Predictions endpoint so explanations match what the UI shows
+
 ### Dashboard Analytics
 
 - Real-time clinic metrics (patients, wait times, utilization)
@@ -43,6 +49,7 @@ Django REST API backend for predicting patient no-shows and optimizing clinic sc
 - pandas 2.0+
 - numpy 1.24+
 - django-cors-headers 4.0+
+- lime 0.2+ (per-prediction explanations)
 
 ## Getting Started
 
@@ -107,6 +114,13 @@ python check_model.py
   - Get no-show predictions for uploaded patient data
   - Returns: Array of patient objects with `noShowProbability`, `riskLevel`, `previousNoShows`
 
+- **GET** `/api/predictions/<int:appointment_id>/explain`
+
+  - Get a LIME explanation for a single appointment's no-show prediction
+  - URL kwarg: `appointment_id` (int) — must match a row in the uploaded CSV's `AppointmentID` column
+  - Returns: `{ appointmentId, noShowProbability, topFeatures: [{ feature, weight, direction }] }` where `direction` is `"noshow"` (positive weight) or `"show"` (negative weight)
+  - First call cold-loads the LIME explainer (~7s); subsequent calls are ~50ms
+
 - **POST** `/api/clear`
   - Clear all patient data from session
   - Returns: `{ success, message }`
@@ -167,6 +181,7 @@ backend/
 │   ├── services/
 │   │   ├── csv_service.py
 │   │   ├── prediction_service.py
+│   │   ├── explanation_service.py
 │   │   └── simulation_service.py
 │   ├── migrations/
 │   ├── urls.py

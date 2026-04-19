@@ -25,6 +25,7 @@ React-based web application for predicting patient no-shows and optimizing clini
 - Risk level filtering (High/Medium/Low)
 - Full patient data display (13 CSV columns + predictions)
 - Sortable by probability, patient ID, or date
+- "Why?" button on each row opens a LIME explanation modal showing the top features pushing the prediction toward Show or No-Show
 
 ### Simulation
 

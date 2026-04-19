@@ -15,7 +15,7 @@ The Clinic Appointment Optimizer helps healthcare clinics reduce no-show rates a
 
 - **Dashboard** - Real-time clinic metrics, weekly performance tracking, and strategy comparison
 - **Upload** - CSV file upload with format validation and sample templates
-- **Predictions** - Patient no-show risk predictions with filtering and sorting
+- **Predictions** - Patient no-show risk predictions with filtering, sorting, and per-patient LIME explanations
 - **Simulation** - Interactive clinic parameter adjustment with optimization recommendations
 
 ## Tech Stack

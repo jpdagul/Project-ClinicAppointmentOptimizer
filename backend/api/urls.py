@@ -7,6 +7,7 @@ from . import views
 urlpatterns = [
     path('upload', views.upload_csv, name='upload_csv'),
     path('predictions', views.get_predictions, name='get_predictions'),
+    path('predictions/<int:appointment_id>/explain', views.explain_prediction, name='explain_prediction'),
     path('clear', views.clear_data, name='clear_data'),
     path('dashboard/metrics', views.get_dashboard_metrics, name='get_dashboard_metrics'),
     path('dashboard/weekly-performance', views.get_weekly_performance, name='get_weekly_performance'),

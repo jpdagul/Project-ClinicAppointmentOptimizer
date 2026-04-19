@@ -202,10 +202,12 @@ class PredictionService:
         
         # Make predictions
         probabilities = self.model.predict_proba(X_scaled)[:, 1]
-        
+
+        prob_series = pd.Series(probabilities, index=X.index)
+
         # Add predictions to original data
         result = patient_data.copy()
-        result['noShowProbability'] = probabilities
+        result['noShowProbability'] = prob_series
         result['riskLevel'] = result['noShowProbability'].apply(
             lambda p: 'High' if p >= 0.6 else ('Medium' if p >= 0.3 else 'Low')
         )

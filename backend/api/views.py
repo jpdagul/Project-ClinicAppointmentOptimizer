@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 from .services.prediction_service import get_prediction_service
 from .services.csv_service import CSVService
 from .services.simulation_service import SimulationService
+from .services.explanation_service import get_explanation_service
 
 
 @api_view(['POST'])
@@ -370,6 +371,42 @@ def run_simulation(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+
+
+@api_view(['GET'])
+@csrf_exempt
+def explain_prediction(request, appointment_id):
+    """
+    Get a LIME explanation for a single uploaded appointment.
+
+    Response: { appointmentId, noShowProbability, topFeatures: [{ feature, weight, direction }] }
+    """
+    session_patients = request.session.get('patient_data')
+    if not session_patients:
+        return Response(
+            {'error': 'No uploaded patient data found. '
+                      'Please upload a CSV file on the Upload page first.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    df = pd.DataFrame(session_patients)
+    if 'AppointmentID' not in df.columns or not (df['AppointmentID'] == appointment_id).any():
+        return Response(
+            {'error': f'AppointmentID {appointment_id} not found in uploaded data.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        result = get_explanation_service().get_explanation(df, appointment_id)
+    except Exception as e:
+        logger.error(f"LIME explanation failed: {traceback.format_exc()}")
+        return Response(
+            {'error': f'Error generating explanation: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    result['appointmentId'] = int(appointment_id)
+    return Response(result)
 
 
 @api_view(['POST'])

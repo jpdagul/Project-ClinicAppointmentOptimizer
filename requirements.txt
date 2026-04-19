@@ -18,10 +18,29 @@ sklearn-compat==0.1.5
 # simulation
 simpy==4.1.1
 
+# explainability (used by the live /api/predictions/<id>/explain endpoint)
+lime==0.2.0.1
+
+# transitive — pulled in by lime, pinned for reproducibility
+matplotlib==3.10.8
+scikit-image==0.26.0
+pillow==12.2.0
+tqdm==4.67.3
+ImageIO==2.37.3
+tifffile==2026.4.11
+networkx==3.6.1
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.62.1
+kiwisolver==1.5.0
+pyparsing==3.3.2
+lazy-loader==0.5
+packaging==26.1
+
 # transitive (kept pinned so installs are reproducible)
 python-dateutil==2.9.0.post0
 six==1.17.0
 
 # To retrain the model from scratch (optional, not needed to run the app):
-#   pip install xgboost matplotlib lime
+#   pip install xgboost matplotlib
 #   brew install libomp   # macOS only, for xgboost
