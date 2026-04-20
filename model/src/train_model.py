@@ -164,7 +164,7 @@ def train_and_select_model():
         print("Feature importance not available for this model.")
 
     # save best model
-    model_path = f"models/{best_name.lower().replace(' ', '_')}_model.pkl"
+    model_path = "models/best_model.pkl"
     joblib.dump(calibrated_model, model_path)
     print(f"\nBest model: {best_name} | Saved to: {model_path}")
 

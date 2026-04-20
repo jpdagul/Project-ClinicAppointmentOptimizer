@@ -52,7 +52,7 @@ def upload_csv(request):
     # Process CSV (limit to 100 records to avoid lag)
     file.seek(0)  # Reset file pointer
     try:
-        df = CSVService.process_csv(file, limit=100)
+        df = CSVService.process_csv(file, limit=200)
         processed_records = len(df)
         
         # Store in session for later use

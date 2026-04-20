@@ -44,7 +44,7 @@ class CSVService:
             return False, f"Error reading CSV: {str(e)}"
     
     @staticmethod
-    def process_csv(file, limit=100):
+    def process_csv(file, limit=200):
         """
         Process CSV file and return DataFrame.
         

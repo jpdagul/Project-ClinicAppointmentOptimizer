@@ -22,7 +22,7 @@ class PredictionService:
     
     def __init__(self):
         """Initialize the prediction service with the trained model."""
-        self.model_path = MODEL_DIR / 'models' / 'gradient_boosting_model.pkl'
+        self.model_path = MODEL_DIR / 'models' / 'best_model.pkl'
         self.model = None
         self.scaler = None
         self.feature_columns = None
@@ -33,14 +33,10 @@ class PredictionService:
         """Load the trained model."""
         if not self.model_path.exists():
             # Try alternative model name
-            alt_path = MODEL_DIR / 'models' / 'gradient_boosting.pkl'
-            if alt_path.exists():
-                self.model_path = alt_path
-            else:
-                raise FileNotFoundError(
-                    f"Model not found at {self.model_path} or {alt_path}. "
-                    f"Please train the model first using 'python model/main.py'"
-                )
+            raise FileNotFoundError(
+                f"Model not found at {self.model_path}. "
+                f"Please train the model first using 'python model/main.py'"
+            )
         
         try:
             self.model = joblib.load(self.model_path)
